@@ -1,0 +1,66 @@
+{
+  "family": "nginx",
+  "containerDefinitions": [
+    {
+      "name": "nginx",
+      "image": "matthewduren/docker-nginx-php",
+      "cpu": 256,
+      "memory": 512,
+      "entryPoint": [],
+      "environment": [],
+      "command": [],
+      "portMappings": [
+        {
+          "hostPort": 80,
+          "containerPort": 80,
+          "protocol": "tcp"
+        },
+        {
+          "hostPort": 443,
+          "containerPort": 443,
+          "protocol": "tcp"
+        }
+      ],
+      "volumesFrom": [],
+      "links": [],
+      "mountPoints": [
+        {
+          "sourceVolume": "logs",
+          "containerPath": "/var/logs/web",
+          "readOnly": false
+        },
+        {
+          "sourceVolume": "apps",
+          "containerPath": "/var/apps",
+          "readOnly": false
+        },
+        {
+          "sourceVolume": "docker_sock",
+          "containerPath": "/tmp/docker.sock",
+          "readOnly": false
+        }
+      ],
+      "essential": true
+    }
+  ],
+  "volumes": [
+    {
+      "name": "logs",
+      "host": {
+        "sourcePath": "/var/docker/logs/"
+      }
+    },
+    {
+      "name": "apps",
+      "host": {
+        "sourcePath": "/var/docker/apps/"
+      }
+    },
+    {
+      "name": "docker_sock",
+      "host": {
+        "sourcePath": "/var/run/docker.sock"
+      }
+    }
+  ]
+}
