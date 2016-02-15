@@ -1,0 +1,108 @@
+# If we receive X-Forwarded-Proto, pass it through; otherwise, pass along the scheme used to connect to this server
+map $http_x_forwarded_proto $proxy_x_forwarded_proto {
+  default $http_x_forwarded_proto;
+  '' $scheme;
+}
+# If we receive Upgrade, set Connection to "upgrade"; otherwise, delete any Connection header that may have been passed to this server
+map $http_upgrade $proxy_connection {
+  default upgrade;
+  '' '';
+}
+gzip_types text/plain text/css application/javascript application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript; log_format vhost '$host $remote_addr - $remote_user [$time_local] '
+                 '"$request" $status $body_bytes_sent '
+                 '"$http_referer" "$http_user_agent"'; access_log /proc/self/fd/1 vhost; error_log /proc/self/fd/2;
+# HTTP 1.1 support
+proxy_http_version 1.1; proxy_buffering off; proxy_set_header Host $http_host; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $proxy_connection; proxy_set_header X-Real-IP $remote_addr; proxy_set_header
+X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $proxy_x_forwarded_proto;
+
+#Traffic coming in to a proxy server on port 80 hits nginx on port 80. nginx returns https:// for any traffic hitting it on port 80, which then goes back and hits the proxy server on port 443.  Traffic coming in
+#to the proxy server on port 443 gets translated to hit nginx on port 443, but traffic between the proxy server and the nginx container does not use SSL.
+#There is also a health check listening on http:443/health.html
+
+log_format syslog '$host:$server_port $http_x_forwarded_for $remote_addr "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"';
+
+server {
+    listen 80 default_server;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443;
+    server_name _; # This is just an invalid value which will never trigger on a real hostname.
+
+    location /health.html {
+        access_log off;
+        return 200;
+    }
+
+    location / {
+		#This passes nginx logs to syslog to the docker host
+        error_log syslog:server=172.17.42.1 info;
+        access_log syslog:server=172.17.42.1 syslog;
+        return 503;
+    }
+}
+
+{{ range $host, $containers := groupByMulti $ "Env.VIRTUAL_HOST" "," }} upstream {{ $host }}_phpfpm {
+    {{ range $index, $value := $containers }}
+        {{ with $address := index $value.Addresses 0 }}
+    server {{ $address.IP }}:{{ $address.Port }};
+        {{ end }}
+    {{ end }}
+}
+server {
+    listen 443;
+    server_name {{ $host }};
+    root /var/apps/{{ $host }}/site/public/;
+    index index.html index.php;
+    location / {
+        root /var/apps/{{ $host }}/site/public/;
+        try_files $uri $uri/ /index.php$is_args$args;
+    }
+    location ~ \.php$ {
+        include fastcgi_params;
+	fastcgi_ignore_client_abort on;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass {{ $host }}_phpfpm;
+        fastcgi_index index.php;
+        fastcgi_param HTTPS on;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_param REQUEST_URI $request_uri;
+        fastcgi_param QUERY_STRING $query_string;
+        fastcgi_param REQUEST_METHOD $request_method;
+        fastcgi_param CONTENT_TYPE $content_type;
+        fastcgi_param CONTENT_LENGTH $content_length;
+        fastcgi_param REMOTE_ADDR $http_x_forwarded_for;
+    }
+	#This passes nginx logs to syslog to the docker host
+    error_log syslog:server=172.17.42.1 info;
+    access_log syslog:server=172.17.42.1 syslog;
+}
+{{ end }}
+
+{{ range $host, $containers:= groupByMulti $ "Env.PROXY_HOST" "," }} upstream {{ $host }}_proxy {
+    {{ range $index, $value := $containers }}
+        {{ with $address := index $value.Addresses 0 }}
+    server {{ $address.IP }}:{{ $address.Port }};
+        {{ end }}
+    {{ end }}
+}
+
+server {
+    listen 443;
+    server_name {{ $host }};
+    root /var/apps/{{ $host }}/site/public/;
+    index index.html index.asp index.aspx index.php;
+
+    location / {
+        resolver localhost;
+        proxy_pass http://{{ $host }}_proxy$request_uri?$args;
+    }
+
+        #This passes nginx logs to syslog to the docker host
+    error_log syslog:server=172.17.42.1 info;
+    access_log syslog:server=172.17.42.1 syslog;
+}
+{{ end }}
+
