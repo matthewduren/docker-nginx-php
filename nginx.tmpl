@@ -61,7 +61,10 @@ server {
     }
     location ~ \.php$ {
         include fastcgi_params;
+<<<<<<< HEAD
 	fastcgi_ignore_client_abort on;
+=======
+>>>>>>> 9cc3834f68785c531df30bb3361f8c0e6e7b2d7b
         fastcgi_split_path_info ^(.+\.php)(/.+)$;
         fastcgi_pass {{ $host }}_phpfpm;
         fastcgi_index index.php;
@@ -73,13 +76,18 @@ server {
         fastcgi_param REQUEST_METHOD $request_method;
         fastcgi_param CONTENT_TYPE $content_type;
         fastcgi_param CONTENT_LENGTH $content_length;
+<<<<<<< HEAD
         fastcgi_param REMOTE_ADDR $http_x_forwarded_for;
+=======
+        fastcgi_param REMOTE_ADDR $http_x_real_ip;
+>>>>>>> 9cc3834f68785c531df30bb3361f8c0e6e7b2d7b
     }
 	#This passes nginx logs to syslog to the docker host
     error_log syslog:server=172.17.42.1 info;
     access_log syslog:server=172.17.42.1 syslog;
 }
 {{ end }}
+<<<<<<< HEAD
 
 {{ range $host, $containers:= groupByMulti $ "Env.PROXY_HOST" "," }} upstream {{ $host }}_proxy {
     {{ range $index, $value := $containers }}
@@ -106,3 +114,5 @@ server {
 }
 {{ end }}
 
+=======
+>>>>>>> 9cc3834f68785c531df30bb3361f8c0e6e7b2d7b
